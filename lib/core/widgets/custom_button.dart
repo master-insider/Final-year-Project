@@ -1,0 +1,28 @@
+import 'package:flutter/material.dart';
+
+class CustomButton extends StatelessWidget {
+  final String text;
+  final VoidCallback onPressed;
+  final bool enabled;
+
+  const CustomButton({
+    super.key,
+    required this.text,
+    required this.onPressed,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: enabled ? onPressed : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Text(text, style: const TextStyle(fontSize: 16)),
+        ),
+      ),
+    );
+  }
+}
