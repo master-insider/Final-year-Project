@@ -1,47 +1,47 @@
+// lib/features/budgets/presentation/providers/budget_provider.dart
 import 'package:flutter/material.dart';
+import '../../domain/budget.dart';
 import '../../domain/budget_repository.dart';
-import '../../data/models/budget_model.dart';
+import '../../../../core/exceptions/exceptions.dart'; 
 
-class BudgetProvider with ChangeNotifier {
+class BudgetProvider extends ChangeNotifier {
   final BudgetRepository repository;
+  
+  List<Budget> _budgets = [];
+  bool isLoading = false;
+  String? errorMessage;
+  
+  List<Budget> get budgets => _budgets;
 
   BudgetProvider({required this.repository});
 
-  BudgetModel? _budget;
-  bool _isLoading = false;
-
-  BudgetModel? get budget => _budget;
-  bool get isLoading => _isLoading;
-
-  Future<void> loadBudget() async {
-    _isLoading = true;
+  Future<void> loadBudgets() async {
+    isLoading = true;
+    errorMessage = null;
     notifyListeners();
-
     try {
-      _budget = await repository.fetchCurrentBudget();
-    } catch (e) {
-      debugPrint("Load Budget Error: $e");
-    }
-
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> createBudget(BudgetModel budget) async {
-    try {
-      _budget = await repository.createBudget(budget);
+      _budgets = await repository.fetchAllBudgets();
+    } on AppException catch (e) {
+      errorMessage = 'Failed to load budgets: ${e.message}';
+      _budgets = [];
+    } finally {
+      isLoading = false;
       notifyListeners();
-    } catch (e) {
-      debugPrint("Create Budget Error: $e");
     }
   }
 
-  Future<void> updateBudget(int id, BudgetModel updated) async {
+  Future<void> createOrUpdateBudget(Budget budget) async {
     try {
-      _budget = await repository.updateBudget(id, updated);
+      if (budget.id.isEmpty) {
+        await repository.createBudget(budget);
+      } else {
+        await repository.updateBudget(budget);
+      }
+      // Reload list after action
+      await loadBudgets(); 
+    } on AppException catch (e) {
+      errorMessage = 'Failed to save budget: ${e.message}';
       notifyListeners();
-    } catch (e) {
-      debugPrint("Update Budget Error: $e");
     }
   }
 }

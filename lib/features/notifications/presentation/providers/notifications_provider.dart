@@ -1,71 +1,84 @@
+// lib/features/notifications/presentation/providers/notification_provider.dart
 import 'package:flutter/material.dart';
-import '../../../services/local_storage.dart';
-import '../../../services/notifications_service.dart';
+import '../../domain/notification.dart';
+import '../../domain/notification_repository.dart';
+import '../../../../core/exceptions/exceptions.dart';
 
-class NotificationsProvider with ChangeNotifier {
-  final LocalStorageService _local = LocalStorageService();
-  final NotificationsService _notif = NotificationsService();
+class NotificationProvider extends ChangeNotifier {
+  final NotificationRepository repository;
 
-  bool _enabled = true;
-  String _dailyTime = '08:00'; // default
+  // --- State Variables ---
+  List<AppNotification> _notifications = [];
+  bool isLoading = false;
+  String? errorMessage;
 
-  bool get enabled => _enabled;
-  String get dailyTime => _dailyTime;
+  List<AppNotification> get notifications => _notifications;
+  List<AppNotification> get unreadNotifications => 
+      _notifications.where((n) => !n.isRead).toList();
+  int get unreadCount => unreadNotifications.length;
 
-  NotificationsProvider() {
-    _load();
-  }
+  NotificationProvider({required this.repository});
 
-  Future<void> _load() async {
-    _enabled = await _local.isNotificationsEnabled();
-    _dailyTime = (await _local.getDailySummaryTime()) ?? _dailyTime;
+  // --- Core Methods ---
+
+  Future<void> loadNotifications() async {
+    isLoading = true;
+    errorMessage = null;
     notifyListeners();
-  }
 
-  Future<void> toggleEnabled(bool value) async {
-    _enabled = value;
-    await _local.setNotificationsEnabled(value);
-    if (!value) {
-      await _notif.cancelAll();
-    } else {
-      // schedule default daily summary
-      final parts = _dailyTime.split(':');
-      final hour = int.parse(parts[0]);
-      final minute = int.parse(parts[1]);
-      await scheduleDailySummary(hour, minute);
+    try {
+      _notifications = await repository.fetchNotifications();
+    } on AppException catch (e) {
+      errorMessage = 'Failed to load notifications: ${e.message}';
+      _notifications = [];
+    } catch (e) {
+      errorMessage = 'An unexpected error occurred.';
+      _notifications = [];
+    } finally {
+      isLoading = false;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
-  Future<void> scheduleDailySummary(int hour, int minute) async {
-    _dailyTime = '${hour.toString().padLeft(2,'0')}:${minute.toString().padLeft(2,'0')}';
-    await _local.setDailySummaryTime(_dailyTime);
-
-    // Use id 1000 for daily summary so we can cancel/replace easily
-    await _notif.scheduleDailyNotification(
-      id: 1000,
-      title: 'Daily Spending Summary',
-      body: 'Tap to view today\'s spending summary.',
-      hour: hour,
-      minute: minute,
-    );
-    notifyListeners();
+  Future<void> markNotificationAsRead(String id) async {
+    try {
+      await repository.markNotificationAsRead(id);
+      
+      // Update local state without a full reload
+      final index = _notifications.indexWhere((n) => n.id == id);
+      if (index != -1) {
+        _notifications[index] = _notifications[index].copyWith(isRead: true);
+        notifyListeners();
+      }
+    } on AppException catch (e) {
+      errorMessage = 'Failed to mark as read: ${e.message}';
+      notifyListeners();
+    }
+  }
+  
+  Future<void> markAllAsRead() async {
+    try {
+      await repository.markAllAsRead();
+      
+      // Update all notifications in local state
+      _notifications = _notifications.map((n) => n.copyWith(isRead: true)).toList();
+      notifyListeners();
+    } on AppException catch (e) {
+      errorMessage = 'Failed to mark all as read: ${e.message}';
+      notifyListeners();
+    }
   }
 
-  /// Initialize notification service (call from main after Firebase init if using push)
-  Future<void> initNotificationService({bool enablePush = true}) async {
-    await _notif.init(enablePush: enablePush);
-  }
-
-  Future<String?> getFcmToken() async {
-    return await _notif.getFcmToken();
-  }
-
-  Future<void> showTestNotification() async {
-    await _notif.showLocalNotification(
-      id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
-      title: 'Test Notification',
-      body: 'This is a test notification.',
-    );
+  Future<void> deleteNotification(String id) async {
+    try {
+      await repository.deleteNotification(id);
+      
+      // Remove from local state
+      _notifications.removeWhere((n) => n.id == id);
+      notifyListeners();
+    } on AppException catch (e) {
+      errorMessage = 'Failed to delete: ${e.message}';
+      notifyListeners();
+    }
   }
 }

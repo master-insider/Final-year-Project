@@ -1,19 +1,64 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'features/config/app_routes.dart';
-import 'features/auth/presentation/providers/auth_provider.dart';
-import 'features/expenses/presentation/providers/expense_provider.dart';
-import 'features/budgets/presentation/providers/budget_provider.dart';
-import 'features/insights/presentation/providers/insights_provider.dart';
-import 'features/profile/presentation/providers/profile_provider.dart';
 
-// Import repositories
+// Core
+import 'core/network/api_client.dart';
+import 'config/app_routes.dart';
+import 'config/main_wrapper_screen.dart'; // Assuming this holds the BottomNav
+
+// Auth Feature
+import 'features/auth/domain/auth_repository.dart';
+import 'features/auth/data/rest_auth_repository.dart';
+import 'features/auth/presentation/providers/auth_provider.dart';
+import 'features/auth/presentation/screens/login_screen.dart';
+
+// Expenses Feature
 import 'features/expenses/domain/expense_repository.dart';
-import 'features/budgets/domain/budget_repository.dart';
-import 'features/insights/domain/insights_repository.dart';
+import 'features/expenses/data/rest_expense_repository.dart';
+import 'features/expenses/presentation/providers/expense_provider.dart';
+
+// Notifications Feature
+import 'features/notifications/domain/notification_repository.dart';
+import 'features/notifications/data/rest_notification_repository.dart';
+import 'features/notifications/presentation/providers/notifications_provider.dart';
+
+// --- (You would add Budget and other feature dependencies here) ---
 
 void main() {
-  runApp(const MyApp());
+  // 1. Initialize Core Services
+  final apiClient = ApiClient(baseUrl: 'https://api.yourbudgetapp.com');
+
+  // 2. Initialize Repositories (Data Layer)
+  final authRepository = RestAuthRepository(apiClient: apiClient);
+  final expenseRepository = RestExpenseRepository(apiClient: apiClient);
+  final notificationRepository = RestNotificationRepository(apiClient: apiClient);
+  
+  runApp(
+    MultiProvider(
+      providers: [
+        // Core Provider (if any, e.g., Network Status)
+
+        // Auth Provider
+        ChangeNotifierProvider(
+          create: (_) => AuthProvider(repository: authRepository)..checkAuthenticationStatus(),
+        ),
+
+        // Expense Provider
+        ChangeNotifierProvider(
+          create: (context) => ExpenseProvider(repository: expenseRepository)..loadExpenses(),
+        ),
+
+        // Notification Provider
+        ChangeNotifierProvider(
+          create: (context) => NotificationProvider(repository: notificationRepository)..loadNotifications(),
+        ),
+        
+        // --- (Budget Provider, etc., would go here) ---
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -21,64 +66,27 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-          create: (_) => AuthProvider.create()..loadFromStorage(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => ExpenseProvider(
-            repository: ExpenseRepository(api: null), // Pass a repository instance
-          ),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => BudgetProvider(
-            repository: BudgetRepository(api: null), // Pass a repository instance
-          ),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => InsightsProvider(
-            repository: InsightsRepository(api: null), // Pass a repository instance
-          ),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => ProfileProvider(),
-        ),
-      ],
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'Expense Tracker',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-        ),
-        initialRoute: AppRoutes.splash,
-        onGenerateRoute: AppRoutes.generateRoute,
+    return MaterialApp(
+      title: 'Budget App',
+      theme: ThemeData(
+        primarySwatch: Colors.indigo,
+        useMaterial3: true,
       ),
-    );
-  }
-}
-
-class SplashScreen extends StatelessWidget {
-  const SplashScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pushNamed(context, AppRoutes.login);
-              },
-              child: const Text('Go to Login'),
-            ),
-          ],
-        ),
+      // Use the AuthProvider to determine the initial screen
+      home: Consumer<AuthProvider>(
+        builder: (context, authProvider, _) {
+          if (authProvider.isLoading) {
+            // Show a simple splash/loading screen while checking auth status
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          }
+          if (authProvider.isAuthenticated) {
+            return const MainWrapperScreen();
+          } else {
+            return const LoginScreen();
+          }
+        },
       ),
+      onGenerateRoute: AppRoutes.onGenerateRoute,
     );
   }
 }

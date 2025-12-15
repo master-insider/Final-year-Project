@@ -1,12 +1,8 @@
 // lib/features/auth/presentation/screens/register_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
-import '../../../core/widgets/custom_button.dart';
-import '../../../core/widgets/custom_textfield.dart';
 import '../providers/auth_provider.dart';
-import '../../../config/app_routes.dart';
+import '../../../../config/app_routes.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -17,98 +13,175 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-  final _name = TextEditingController();
-  bool _obscure = true;
+  final TextEditingController _fullNameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  
+  bool _isPasswordVisible = false;
 
   @override
   void dispose() {
-    _email.dispose();
-    _password.dispose();
-    _name.dispose();
+    _fullNameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-
-    try {
-      await auth.register(email: _email.text.trim(), password: _password.text.trim(), name: _name.text.trim());
-      if (auth.status == AuthStatus.authenticated) {
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, AppRoutes.home);
-        }
-      }
-    } catch (e) {
-      final msg = (e is Exception) ? e.toString() : 'Registration failed';
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _submitForm(BuildContext context) async {
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+      
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      
+      final success = await authProvider.registerUser(
+        _emailController.text.trim(),
+        _passwordController.text,
+        _fullNameController.text.trim(),
+      );
+      
+      if (success) {
+        // Registration successful. Navigate to the main application.
+        // The AppRouteGuard handles the authentication check at the '/' route.
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRoutes.home, 
+          (Route<dynamic> route) => false,
+        );
+      } else {
+        // Show error message from the provider
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authProvider.errorMessage ?? 'Registration failed. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
-    final isLoading = auth.status == AuthStatus.authenticating;
+    // Watch the provider only to determine the loading state for the button
+    final authProvider = context.watch<AuthProvider>();
+    final isBusy = authProvider.isLoading;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Register')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Form(
-              key: _formKey,
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                CustomTextField(controller: _name, label: 'Full name', validator: (v) {
-                  if (v == null || v.isEmpty) return 'Enter name';
-                  return null;
-                }),
-                const SizedBox(height: 12),
-                CustomTextField(
-                  controller: _email,
-                  label: 'Email',
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Enter email';
-                    if (!v.contains('@')) return 'Enter valid email';
+      appBar: AppBar(
+        title: const Text('Create Account'),
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Join MoneyFlow!',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 30),
+
+                // Full Name Input
+                TextFormField(
+                  controller: _fullNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    prefixIcon: Icon(Icons.person),
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.name,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your full name.';
+                    }
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 20),
+
+                // Email Input
                 TextFormField(
-                  controller: _password,
-                  obscureText: _obscure,
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.email),
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
+                    if (value == null || value.isEmpty || !value.contains('@')) {
+                      return 'Please enter a valid email address.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Password Input
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: !_isPasswordVisible,
                   decoration: InputDecoration(
                     labelText: 'Password',
+                    prefixIcon: const Icon(Icons.lock),
+                    border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscure = !_obscure),
+                      icon: Icon(
+                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordVisible = !_isPasswordVisible;
+                        });
+                      },
                     ),
                   ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Enter password';
-                    if (v.length < 6) return 'Password too short';
+                  validator: (value) {
+                    if (value == null || value.isEmpty || value.length < 6) {
+                      return 'Password must be at least 6 characters.';
+                    }
                     return null;
                   },
                 ),
-                const SizedBox(height: 18),
-                isLoading
-                    ? const CircularProgressIndicator()
-                    : CustomButton(text: 'Register', onPressed: _submit),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, AppRoutes.login);
-                  },
-                  child: const Text('Already have an account? Login'),
+                const SizedBox(height: 30),
+
+                // Register Button
+                ElevatedButton(
+                  onPressed: isBusy ? null : () => _submitForm(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: isBusy 
+                      ? const SizedBox(
+                          height: 20, 
+                          width: 20, 
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                        )
+                      : const Text(
+                          'REGISTER',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                 ),
-              ]),
+                const SizedBox(height: 20),
+
+                // Login Link
+                TextButton(
+                  onPressed: isBusy ? null : () {
+                    Navigator.of(context).pop(); // Go back to the Login Screen
+                  },
+                  child: const Text('Already have an account? Log In'),
+                ),
+              ],
             ),
           ),
         ),

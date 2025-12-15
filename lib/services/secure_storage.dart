@@ -1,66 +1,54 @@
-// // wrapper around flutter_secure_storage for simple usage across app
-// import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
-// class SecureStorageService {
-//   final FlutterSecureStorage _storage = const FlutterSecureStorage();
-
-//   Future<void> write(String key, String value) async {
-//     await _storage.write(key: key, value: value);
-//   }
-
-//   Future<String?> read(String key) async {
-//     return await _storage.read(key: key);
-//   }
-
-//   Future<void> delete(String key) async {
-//     await _storage.delete(key: key);
-//   }
-
-//   Future<void> deleteAll() async {
-//     await _storage.deleteAll();
-//   }
-// }
-
-// import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
-// class SecureStorage {
-//   static const FlutterSecureStorage _storage = FlutterSecureStorage();
-
-//   static const String _tokenKey = "accessToken";
-//   static const String _refreshKey = "refreshToken";
-
-//   static Future<void> saveTokens(String access, String refresh) async {
-//     await _storage.write(key: _tokenKey, value: access);
-//     await _storage.write(key: _refreshKey, value: refresh);
-//   }
-
-//   static Future<String?> readToken() async {
-//     return await _storage.read(key: _tokenKey);
-//   }
-
-//   static Future<String?> readRefreshToken() async {
-//     return await _storage.read(key: _refreshKey);
-//   }
-
-//   static Future<void> clear() async {
-//     await _storage.deleteAll();
-//   }
-// }
-
+// lib/services/secure_storage.dart
+import 'package:flutter/material.dart'; // Needed for debugPrint
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-class SecureStorage {
-  static const _storage = FlutterSecureStorage();
+/// A secure service wrapper for storing sensitive user data like authentication tokens.
+/// This service utilizes the platform-specific secure storage (e.g., Keychain on iOS, KeyStore on Android).
+class SecureStorageService {
+  // Create storage instance (must be initialized once)
+  final FlutterSecureStorage _storage;
 
-  static Future<void> saveToken(String token) async {
-    await _storage.write(key: "access_token", value: token);
+  // Key names for data stored securely
+  static const String _authTokenKey = 'auth_token';
+
+  SecureStorageService() : _storage = const FlutterSecureStorage();
+
+  // --- Token Operations ---
+
+  /// Reads the authentication token from secure storage.
+  /// Used primarily by the AuthRepository when checking the session on app startup.
+  Future<String?> readAuthToken() async {
+    try {
+      return await _storage.read(key: _authTokenKey);
+    } catch (e) {
+      // Log error for debugging, but return null if failed to read
+      debugPrint('Error reading auth token from secure storage: $e');
+      return null;
+    }
   }
 
-  static Future<String?> getToken() async {
-    return await _storage.read(key: "access_token");
+  /// Writes the authentication token to secure storage after login/registration.
+  Future<void> writeAuthToken(String token) async {
+    try {
+      await _storage.write(key: _authTokenKey, value: token);
+    } catch (e) {
+      debugPrint('Error writing auth token to secure storage: $e');
+    }
   }
 
-  static Future<void> clear() async {
+  /// Deletes the authentication token, typically on user logout.
+  Future<void> deleteAuthToken() async {
+    try {
+      await _storage.delete(key: _authTokenKey);
+    } catch (e) {
+      debugPrint('Error deleting auth token from secure storage: $e');
+    }
+  }
+
+  // --- General Operations ---
+  
+  /// Clears all stored secure data (e.g., for full app reset).
+  Future<void> deleteAll() async {
     await _storage.deleteAll();
   }
 }

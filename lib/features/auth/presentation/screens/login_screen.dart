@@ -1,12 +1,8 @@
 // lib/features/auth/presentation/screens/login_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
-import '../../../core/widgets/custom_button.dart';
-import '../../../core/widgets/custom_textfield.dart';
 import '../providers/auth_provider.dart';
-import '../../../config/app_routes.dart';
+import '../../../../config/app_routes.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,94 +13,166 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-  bool _obscure = true;
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  
+  bool _isPasswordVisible = false;
 
   @override
   void dispose() {
-    _email.dispose();
-    _password.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-
-    try {
-      await auth.login(email: _email.text.trim(), password: _password.text.trim());
-      if (auth.status == AuthStatus.authenticated) {
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, AppRoutes.home);
-        }
-      }
-    } catch (e) {
-      final msg = (e is Exception) ? e.toString() : 'Login failed';
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _submitForm(BuildContext context) async {
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+      
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      
+      final success = await authProvider.loginUser(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+      
+      if (success) {
+        // Navigate to the main application route (handled by AppRouteGuard/MainWrapper)
+        // Since the AppRouteGuard is guarding the '/' (home) route, 
+        // the provider change will automatically handle the redirect.
+        // For simplicity, we can pop if we are in a stack, but navigating to home 
+        // is cleaner if this screen was pushed from an unauthenticated stack.
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRoutes.home, 
+          (Route<dynamic> route) => false,
+        );
+      } else {
+        // Show error message from the provider
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authProvider.errorMessage ?? 'Login failed. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
-    final isLoading = auth.status == AuthStatus.authenticating;
+    // Watch the provider only to determine the loading state for the button
+    final authProvider = context.watch<AuthProvider>();
+    final isBusy = authProvider.isLoading;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CustomTextField(
-                    controller: _email,
-                    label: 'Email',
-                    keyboardType: TextInputType.emailAddress,
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Enter email';
-                      if (!v.contains('@')) return 'Enter valid email';
-                      return null;
-                    },
+      appBar: AppBar(
+        title: const Text('Login'),
+        automaticallyImplyLeading: false, // Prevents back button on root screen
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // App Logo/Icon Placeholder
+                const Icon(
+                  Icons.savings_outlined, 
+                  size: 80, 
+                  color: Colors.deepPurple,
+                ),
+                const SizedBox(height: 30),
+
+                Text(
+                  'Welcome Back!',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _password,
-                    obscureText: _obscure,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
-                        onPressed: () => setState(() => _obscure = !_obscure),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 30),
+
+                // Email Input
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.email),
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
+                    if (value == null || value.isEmpty || !value.contains('@')) {
+                      return 'Please enter a valid email address.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Password Input
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: !_isPasswordVisible,
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: const Icon(Icons.lock),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
                       ),
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordVisible = !_isPasswordVisible;
+                        });
+                      },
                     ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Enter password';
-                      if (v.length < 6) return 'Password too short';
-                      return null;
-                    },
                   ),
-                  const SizedBox(height: 18),
-                  isLoading
-                      ? const CircularProgressIndicator()
-                      : CustomButton(text: 'Login', onPressed: _submit),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, AppRoutes.splash); // or register route
-                      Navigator.pushNamed(context, '/register');
-                    },
-                    child: const Text('Don\'t have an account? Register'),
+                  validator: (value) {
+                    if (value == null || value.isEmpty || value.length < 6) {
+                      return 'Password must be at least 6 characters.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 30),
+
+                // Login Button
+                ElevatedButton(
+                  onPressed: isBusy ? null : () => _submitForm(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                ],
-              ),
+                  child: isBusy 
+                      ? const SizedBox(
+                          height: 20, 
+                          width: 20, 
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                        )
+                      : const Text(
+                          'LOG IN',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                ),
+                const SizedBox(height: 20),
+
+                // Register Link
+                TextButton(
+                  onPressed: isBusy ? null : () {
+                    Navigator.of(context).pushNamed(AppRoutes.register);
+                  },
+                  child: const Text('Don\'t have an account? Sign Up'),
+                ),
+              ],
             ),
           ),
         ),
